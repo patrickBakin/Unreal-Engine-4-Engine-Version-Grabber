@@ -1,30 +1,8 @@
 #include <windows.h>
 #include <iostream>
 #include <psapi.h>
-
-namespace PAT
-{
-	static bool DataCompare(PBYTE pData, PBYTE bSig, const char* szMask)
-	{
-		for (; *szMask; ++szMask, ++pData, ++bSig)
-		{
-			if (*szMask == 'x' && *pData != *bSig)
-				return false;
-		}
-		return (*szMask) == 0;
-	}
-
-	static DWORD_PTR FindPattern(DWORD_PTR dwAddress, DWORD dwSize, const char* pbSig, const char* szMask, long offset)
-	{
-		size_t length = strlen(szMask);
-		for (size_t i = NULL; i < dwSize - length; i++)
-		{
-			if (DataCompare((PBYTE)dwAddress + i, (PBYTE)pbSig, szMask))
-				return dwAddress + i + offset;
-		}
-		return 0;
-	}
-}
+#include "memcury.h"
+#include "EngineVersionBase.h"
 // SDK FString Code
 template<class T>
 class TArray
@@ -55,28 +33,51 @@ public:
 		return str;
 	}
 };
-void* Result;
-DWORD_PTR addr_GetEngineVersion;
-FString* GetEngineVersion(void* Result)
+
+
+
+
+class FEngineVersion : FEngineVersionBase
 {
-	return reinterpret_cast<FString*(__fastcall*)(void*)>(addr_GetEngineVersion)(Result);
+public:
+
+
+
+	/** Generates a version string */
+	void ToString(EVersionComponent LastComponent = EVersionComponent::Branch) const
+	{
+		std::cout << Major << "." << Minor << "." << Patch << std::endl;
+
+	};
+
+
+
+
+private:
+
+	/** Branch name. */
+	FString Branch;
+};
+
+uint8_t* GetAddressPTR(uint8_t* ptr, uint8_t offset, uint8_t instr_size)
+{
+	return (ptr + *(int32_t*)(ptr + offset) + instr_size);
 }
 
+void* Result;
+DWORD_PTR VersionCurrent_addr;
+FEngineVersion* GetEngineCurrent(void* Result)
+{
+	return reinterpret_cast<struct FEngineVersion* (__fastcall*)(void*)>(VersionCurrent_addr)(Result);
+}
 DWORD _stdcall InitEngineVersion(LPVOID)
 {
 	DWORD_PTR BaseAddress = (DWORD_PTR)GetModuleHandle(NULL);
 	MODULEINFO ModuleInfo;
 	GetModuleInformation(GetCurrentProcess(), (HMODULE)BaseAddress, &ModuleInfo, sizeof(ModuleInfo));
-	addr_GetEngineVersion = PAT::FindPattern(BaseAddress, ModuleInfo.SizeOfImage, "\x40\x53\x48\x83\xEC\x20\x48\x8B\xD9\xE8\x00\x00\x00\x00\x48\x8B\xC8\x41\xB8\x04\x00\x00\x00\x48\x8B\xD3", "xxxxxxxxxx????xxxxxxxxxxxx", 0);
-	if (addr_GetEngineVersion)
-	{
-		FString* Engine = GetEngineVersion(&Result);
-		std::cout << "EngineVer: " << Engine->ToString().c_str() << std::endl;
-	}
-	else
-	{
-		std::cout << "Pattern Not Found" << std::endl;
-	}
+	VersionCurrent_addr = (DWORD_PTR)(GetAddressPTR((uint8_t*)(Memcury::Scanner::FindStringRef(L"%sunreal-v%i-%s.dmp").ScanFor({ 0x48,0x8B,0xC8,0xE8 }, false).Get()) - 0x5, 0x1, 0x5));
+
+	GetEngineCurrent(&Result)->ToString();
 	return NULL;
 }
 
